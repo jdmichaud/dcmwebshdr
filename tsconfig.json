@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es5",
+    "importHelpers": true,
+    "strict": true,
+    "noEmitHelpers": true,
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "lib" : ["es2015", "dom", "ScriptHost"]
+  }
+}
