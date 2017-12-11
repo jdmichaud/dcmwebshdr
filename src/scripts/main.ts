@@ -1,156 +1,36 @@
-import 'core-js/es6/promise';
+// import 'core-js/es6/promise';
+import * as fragmentShaderSource from './fragment-shader.glsl';
+import * as vertexShaderSource from './vertex-shader.glsl';
+import * as webGl from './webgl';
 
 const SLOPE = 1.54163614163614;
 const INTERCEPT = 0;
 const WW = 2223;
 const WC = 1112;
 
-const vertexShaderSource = `
-// an attribute will receive data from a buffer
-attribute vec2 a_position;
-uniform vec2 u_resolution;
-attribute vec2 a_texCoord;
-varying vec2 v_texCoord;
+function GlobalState(this: any, slope, intercept, ww, wc, deltaX, deltaY, zoom) {
+  this._slope = slope;
+  this._intercept = intercept;
+  this._ww = ww;
+  this._wc = wc;
+  this._deltaX = deltaX;
+  this._deltaY = deltaY;
+  this._zoom = zoom;
 
-void main() {
-  // convert the position from pixels to 0.0 to 1.0
-  vec2 zeroToOne = a_position / u_resolution;
-
-  // convert from 0->1 to 0->2
-  vec2 zeroToTwo = zeroToOne * 2.0;
-
-  // convert from 0->2 to -1->+1 (clipspace)
-  vec2 clipSpace = zeroToTwo - 1.0;
-
-  // gl_Position is a special variable a vertex shader
-  // is responsible for setting
-  gl_Position = vec4(clipSpace, 0, 1);
-  // pass the texCoord to the fragment shader
-  // The GPU will interpolate this value between points
-  v_texCoord = a_texCoord;
-}
-`;
-
-const fragmentShaderSource = `
-// fragment shaders don't have a default precision so we need
-// to pick one. mediump is a good default
-precision mediump float;
-
-// our texture
-uniform sampler2D u_image;
-
-uniform float u_slope;
-uniform float u_intercept;
-uniform float u_window_width;
-uniform float u_window_center;
-
-// the texCoords passed in from the vertex shader.
-varying vec2 v_texCoord;
-
-void main() {
-  vec4 color = texture2D(u_image, v_texCoord);
-  // Slope & intercept
-  color = u_slope * color + u_intercept;
-  // WW/WC
-  float lowerBound = (u_window_center - u_window_width / 2.0);
-  float higherBound = (u_window_center + u_window_width / 2.0);
-  color = color - u_window_center;
-  color = color / u_window_width;
-  color -= color * max(sign(lowerBound - color), 0.0);
-  color += (1.0 - color) * max(sign(color - higherBound), 0.0);
-  // gl_FragColor is a special variable a fragment shader
-  // is responsible for setting
-  gl_FragColor = color;
-}
-`;
-
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-  if (success) {
-    return shader;
+  this.reset = function reset() {
+    this.slope = this._slope;
+    this.intercept = this._intercept;
+    this.ww = this._ww;
+    this.wc = this._wc;
+    this.deltaX = this._deltaX;
+    this.deltaY = this._deltaY;
+    this.zoom = this._zoom;
   }
 
-  console.log(gl.getShaderInfoLog(shader));
-  gl.deleteShader(shader);
+  this.reset();
 }
 
-function createProgram(gl, vertexShader, fragmentShader) {
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  const success = gl.getProgramParameter(program, gl.LINK_STATUS);
-  if (success) {
-    return program;
-  }
-
-  console.log(gl.getProgramInfoLog(program));
-  gl.deleteProgram(program);
-}
-
-function init(canvasName) {
-  const canvas: any = document.getElementById(canvasName);
-  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-  if (gl === null || gl === undefined) {
-    console.log('WebGL not available on your browser');
-  }
-
-  // Create the shaders and the program
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-  const program = createProgram(gl, vertexShader, fragmentShader);
-
-  return { canvas, gl, program };
-}
-
-function clearScreen(gl, r, g, b, a) {
-  // Clear the canvas
-  gl.clearColor(r, g, b, a);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-}
-
-function createRectangle(gl, x, y, width, height) {
-  const positions = [
-    x, y,
-    width, y,
-    x, height,
-    x, height,
-    width, y,
-    width, height,
-  ];
-  // Create a buffer...
-  const positionBuffer = gl.createBuffer();
-  // ... and bind it to the ARRAY_BUFFER webGL global
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  // Fill up the positionBuffer from the javascript array
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-
-  return positionBuffer;
-}
-
-function bindBufferToAttribute(gl, program, buffer, attributeName) {
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  // Now we tell webGL how to take the data from the buffer and assign it
-  // to the attribute for the shaders input
-  const attribute = gl.getAttribLocation(program, attributeName);
-  gl.enableVertexAttribArray(attribute);
-
-  return attribute;
-}
-
-function drawScene(gl, nbVertices) {
-  const primitiveType = gl.TRIANGLES;
-  const offset = 0;
-  // We will call the shareds nbVertices times. Each time, the share will read
-  // a_position and shift the offset on the positionBuffer
-  // to the size of 2 * sizeof(float)
-  gl.drawArrays(primitiveType, offset, nbVertices);
-}
-
-function httpGetAsync(url, responseType = "arraybuffer") {
+function httpGetAsync(url, responseType = 'arraybuffer') {
   return new Promise<XMLHttpRequest>((resolve, reject) => {
     const xmlHttp = new XMLHttpRequest();
     xmlHttp.responseType = responseType as 'text';
@@ -161,77 +41,92 @@ function httpGetAsync(url, responseType = "arraybuffer") {
         reject(xmlHttp);
       }
     };
-    xmlHttp.open("GET", url, true); // true for asynchronous
+    xmlHttp.open('GET', url, true); // true for asynchronous
     xmlHttp.send(null);
   });
 }
 
 function setWWWCDisplay(ww, wc) {
   const wwElement = document.getElementById('ww');
-  if (wwElement) { wwElement.textContent = ww; }
+  if (wwElement) {
+    wwElement.textContent = ww;
+  }
   const wcElement = document.getElementById('wc');
-  if (wcElement) { wcElement.textContent = wc; }
+  if (wcElement) {
+    wcElement.textContent = wc;
+  }
 }
 
-function initWWWC(gl, windowWidthLocation, windowCenterLocation) {
-  gl.uniform1f(windowWidthLocation, WW / 65535);
-  gl.uniform1f(windowCenterLocation, WC / 65535);
-  setWWWCDisplay(WW, WC);
+function initLocations(gl, locations, globalState) {
+  gl.uniform1f(locations.windowWidthLocation, globalState.ww / 65535);
+  gl.uniform1f(locations.windowCenterLocation, globalState.wc / 65535);
+  setWWWCDisplay(globalState.ww, globalState.wc);
 }
 
-const delays: number[] = [];
-(function displayMeanDelay() {
-  let lastSum = 0.0;
-  setInterval(() => {
-    let sum = 0.0;
-    delays.forEach(entry => sum += entry);
-    if (lastSum !== sum) {
-      const fps = 1000 / (sum / delays.length);
-      const fpsElement = document.getElementById('fps');
-      if (fpsElement) {
-        fpsElement.textContent = fps.toString();
-      }
-      lastSum = sum;
-    }
-  }, 200);
-})();
+function EventObject(this: any, gl, canvas, globalState, locations) {
+  enum action_e {
+    WWWC = 0,
+    ZOOM = 1,
+    PAN = 2,
+    NONE,
+  };
 
-function initDragEvents(gl, canvas, windowWidthLocation, windowCenterLocation) {
-  let mousepressed = false;
+  let action: action_e = action_e.NONE;
   const mousestart = { clientX: 0, clientY: 0 };
-  let ww = WW;
-  let wc = WC;
-  let dww = ww;
-  let dwc = wc;
-  canvas.addEventListener("mousedown", (event) => {
-    mousepressed = true;
+
+  function adjustWWWC(event) {
+    globalState.ww += event.movementX * 10;
+    globalState.wc -= event.movementY * 10;
+    gl.uniform1f(locations.windowWidthLocation, globalState.ww / 65535);
+    gl.uniform1f(locations.windowCenterLocation, globalState.wc / 65535);
+    setWWWCDisplay(globalState.ww, globalState.wc);
+    webGl.drawScene(gl, 6);
+  }
+
+  this.start = function start(event) {
+    action = event.button;
     mousestart.clientX = event.clientX;
     mousestart.clientY = event.clientY;
-  });
-  canvas.addEventListener("mouseup", () => {
-    mousepressed = false;
-    ww = dww;
-    wc = dwc;
-  });
-  canvas.addEventListener("mousemove", (event) => {
-    const start = window.performance.now();
-    if (mousepressed) {
-      dww = (ww - (mousestart.clientX - event.clientX) * 10);
-      dwc = (wc + (mousestart.clientY - event.clientY) * 10);
-      gl.uniform1f(windowWidthLocation, dww / 65535);
-      gl.uniform1f(windowCenterLocation, dwc / 65535);
-      setWWWCDisplay(dww, dwc);
-      drawScene(gl, 6);
+  }
+
+  this.stop = function stop() {
+    action = action_e.NONE;
+  }
+
+  this.move = function move(event) {
+    switch (action) {
+    case action_e.WWWC: {
+      adjustWWWC(event);
+      break;
     }
-    delays.push(window.performance.now() - start);
-    if (delays.length > 100) { delays.shift(); }
+    case action_e.ZOOM: {
+      adjustWWWC(event);
+      break;
+    }
+    case action_e.PAN: {
+      adjustWWWC(event);
+      break;
+    }
+    }
+  }
+
+  this.dblClick = function dblClick(event) {
+    globalState.reset();
+    initLocations(gl, locations, globalState);
+    webGl.drawScene(gl, 6);
+  }
+}
+
+function initDragEvents(canvas, eventObject) {
+  canvas.addEventListener('mousedown', event => {
+    eventObject.start(event);
+    window.addEventListener('mouseup', () => {
+      eventObject.stop();
+      canvas.removeEventListener('mouseMove', eventObject.move);
+    }, { once: true });
+    canvas.addEventListener('mousemove', eventObject.move);
   });
-  canvas.addEventListener("dblclick", () => {
-    ww = WW;
-    wc = WC;
-    initWWWC(gl, windowWidthLocation, windowCenterLocation);
-    drawScene(gl, 6);
-  });
+  canvas.addEventListener('dblclick', eventObject.dblClick);
 }
 
 // Main program starts here
@@ -240,8 +135,10 @@ function main() {
   let gl;
   let program;
 
-  ({canvas, gl, program} = init('c'));
-  clearScreen(gl, 0, 0, 0, 0);
+  ({ canvas, gl, program } = webGl.init('c', vertexShaderSource, fragmentShaderSource));
+  webGl.clearScreen(gl, 0, 0, 0, 0);
+
+  const globalState = new GlobalState(SLOPE, INTERCEPT, WW, WC, 0, 0, 1);
 
   // Tell it to use our program (pair of shaders)
   gl.useProgram(program);
@@ -260,56 +157,96 @@ function main() {
   // Set the WindowWidth and WindowCenter
   const windowWidthLocation = gl.getUniformLocation(program, 'u_window_width');
   const windowCenterLocation = gl.getUniformLocation(program, 'u_window_center');
-  initWWWC(gl, windowWidthLocation, windowCenterLocation);
-  initDragEvents(gl, canvas, windowWidthLocation, windowCenterLocation);
+
+  const locations = {
+    interceptLocation,
+    resolutionUniformLocation,
+    slopeLocation,
+    windowCenterLocation,
+    windowWidthLocation,
+  }
+
+  initLocations(gl, locations, globalState);
+  initDragEvents(canvas, new EventObject(gl, canvas, globalState, locations));
 
   // three 2d points makes a triangle
-  const positionBuffer = createRectangle(gl, 0, 0, canvas.width, canvas.height);
-  const positionAttributeLocation = bindBufferToAttribute(gl, program, positionBuffer,
-      'a_position');
+  const positionBuffer = webGl.createRectangle(gl, 0, 0, canvas.width, canvas.height);
+  const positionAttributeLocation = webGl.bindBufferToAttribute(
+    gl,
+    program,
+    positionBuffer,
+    'a_position'
+  );
 
   // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-  const size = 2;          // 2 components per iteration
-  const type = gl.FLOAT;   // the data is 32bit floats
+  const size = 2; // 2 components per iteration
+  const type = gl.FLOAT; // the data is 32bit floats
   const normalize = false; // don't normalize the data
-  const stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-  const offset = 0;        // start at the beginning of the buffer
-  gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize,
-      stride, offset);
+  const stride = 0; // 0 = move forward size * sizeof(type) each iteration to get the next position
+  const offset = 0; // start at the beginning of the buffer
+  gl.vertexAttribPointer(
+    positionAttributeLocation,
+    size,
+    type,
+    normalize,
+    stride,
+    offset
+  );
 
   // Retrieve the image
-  httpGetAsync('/case1_008_000.raw').then(request => {
-    // look up where the texture coordinates need to go.
-    const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
-    // provide texture coordinates for the rectangle.
-    const texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        0.0, 0.0,
-        1.0, 0.0,
-        0.0, 1.0,
-        0.0, 1.0,
-        1.0, 0.0,
-        1.0, 1.0]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+  httpGetAsync('/case1_008_000.raw')
+    .then(request => {
+      // look up where the texture coordinates need to go.
+      const texCoordLocation = gl.getAttribLocation(program, 'a_texCoord');
+      // provide texture coordinates for the rectangle.
+      const texCoordBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+        ]),
+        gl.STATIC_DRAW
+      );
+      gl.enableVertexAttribArray(texCoordLocation);
+      gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Create a texture.
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    // Set the parameters so we can render any size image.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    // Upload the image into the texture.
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, canvas.width, canvas.height, 0,
-        gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array(request.response));
+      // Create a texture.
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      // Set the parameters so we can render any size image.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      // Upload the image into the texture.
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.LUMINANCE,
+        canvas.width,
+        canvas.height,
+        0,
+        gl.LUMINANCE,
+        gl.UNSIGNED_BYTE,
+        new Uint8Array(request.response)
+      );
 
-    // We draw a rectangle, so 6 vertices
-    drawScene(gl, 6);
-    console.log('done');
-  }).catch((err) => console.error(`failed to retrieve image: ${err}`));
+      // We draw a rectangle, so 6 vertices
+      webGl.drawScene(gl, 6);
+    })
+    .catch(err => console.error(`failed to retrieve image: ${err}`));
 }
 
 main();

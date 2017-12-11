@@ -19,13 +19,13 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.ts$/,
-        loader: 'ts-loader',
-      },
-      {
         enforce: 'pre',
         test: /\.ts$/,
         loader: 'tslint-loader',
+      },
+      {
+        test: /\.ts$/,
+        loader: 'ts-loader',
       },
       {
         test: /\.scss$/,
@@ -36,6 +36,10 @@ module.exports = {
         }, {
           loader: "sass-loader" // compiles Sass to CSS
         }],
+      },
+      {
+        test: /\.glsl$/,
+        use: 'raw-loader',
       },
     ],
   },
