@@ -1,6 +1,6 @@
 // import 'core-js/es6/promise';
 import 'styles/base.scss';
-import * as fragmentShaderSource from './fragment-shader.glsl';
+import * as fragmentShaderSource from './fragment-shader-uint16.glsl';
 import * as vertexShaderSource from './vertex-shader.glsl';
 import * as webGl from './webgl';
 
@@ -8,6 +8,8 @@ const SLOPE = 1.54163614163614;
 const INTERCEPT = 0;
 const WW = 2223;
 const WC = 1112;
+// const WW = 24708;
+// const WC = 26237;
 
 function GlobalState(this: any, slope, intercept, ww, wc, deltaX, deltaY, zoom) {
   this._slope = slope;
@@ -61,6 +63,7 @@ function setWWWCDisplay(ww, wc) {
 function initLocations(gl, locations, globalState) {
   gl.uniform1f(locations.windowWidthLocation, globalState.ww);
   gl.uniform1f(locations.windowCenterLocation, globalState.wc);
+  gl.uniform2f(locations.panLocation, globalState.deltaX, globalState.deltaY);
   setWWWCDisplay(globalState.ww, globalState.wc);
 }
 
@@ -84,7 +87,12 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
     webGl.drawScene(gl, 6);
   }
 
-  // function adjustPan
+  function adjustPan(event) {
+    globalState.deltaX = Math.max(Math.min(globalState.deltaX + event.movementX, 512), -512);
+    globalState.deltaY = Math.max(Math.min(globalState.deltaY - event.movementY, 512), -512);
+    gl.uniform2f(locations.panLocation, globalState.deltaX, globalState.deltaY);
+    webGl.drawScene(gl, 6);
+  }
 
   this.start = function start(event) {
     action = event.button;
@@ -107,7 +115,7 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
       break;
     }
     case action_e.PAN: {
-      // adjustPan(event);
+      adjustPan(event);
       break;
     }
     }
@@ -125,9 +133,9 @@ function initDragEvents(canvas, eventObject) {
     eventObject.start(event);
     window.addEventListener('mouseup', () => {
       eventObject.stop();
-      canvas.removeEventListener('mouseMove', eventObject.move);
+      window.removeEventListener('mouseMove', eventObject.move);
     }, { once: true });
-    canvas.addEventListener('mousemove', eventObject.move);
+    window.addEventListener('mousemove', eventObject.move);
   });
   canvas.addEventListener('dblclick', eventObject.dblClick);
 }
@@ -161,8 +169,13 @@ function main() {
   const windowWidthLocation = gl.getUniformLocation(program, 'u_window_width');
   const windowCenterLocation = gl.getUniformLocation(program, 'u_window_center');
 
+  // Set the pan
+  const panLocation = gl.getUniformLocation(program, 'u_pan');
+  gl.uniform2f(panLocation, 0, 0);
+
   const locations = {
     interceptLocation,
+    panLocation,
     resolutionUniformLocation,
     slopeLocation,
     windowCenterLocation,
@@ -197,7 +210,7 @@ function main() {
   );
 
   // Retrieve the image
-  httpGetAsync('/case1_008_000.raw')
+  httpGetAsync('/case1_16.raw')
     .then(request => {
       // look up where the texture coordinates need to go.
       const texCoordLocation = gl.getAttribLocation(program, 'a_texCoord');
@@ -219,6 +232,13 @@ function main() {
       gl.enableVertexAttribArray(texCoordLocation);
       gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
+      // Convert uint16 array to 2*8uint array
+      const src = new Uint16Array(request.response);
+      const dst = new Uint8Array(request.response.byteLength);
+      for (let i = 0; i < request.response.byteLength / 2; ++i) {
+        dst[i * 2]     = src[i] & 0xFF;
+        dst[i * 2 + 1] = src[i] >> 8;
+      }
       // Create a texture.
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -231,23 +251,14 @@ function main() {
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
-        gl.LUMINANCE,
+        gl.LUMINANCE_ALPHA,
         canvas.width,
         canvas.height,
         0,
-        gl.LUMINANCE,
+        gl.LUMINANCE_ALPHA,
         gl.UNSIGNED_BYTE,
-        new Uint8Array(request.response)
+        dst,
       );
-
-      var array = new Uint8Array(request.response);
-      var min = 255.0;
-      var max = 0.0;
-      for (let i = 0; i < array.length; ++i) {
-        min = Math.min(array[i], min);
-        max = Math.max(array[i], max);
-      }
-      console.log('min:', min, 'max:', max);
 
       // We draw a rectangle, so 6 vertices
       webGl.drawScene(gl, 6);

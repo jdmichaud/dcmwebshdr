@@ -21,7 +21,7 @@ void main() {
   // Slope & intercept
   level = u_slope * level + u_intercept;
   // WW/WC
-  level = (level - (window_center - 0.5)) / (window_width - 1.0) + 0.5;
+  level = (level - (window_center - 0.5)) / (window_width) + 0.5;
   clamp(level, 0.0, 1.0);
   // gl_FragColor is a special variable a fragment shader is responsible
   // for setting
