@@ -3,15 +3,14 @@
 <head>
   <title>WebGL 2D Image Processing POC</title>
   <meta charset="UTF-8">
-  <style>
-    body {
-      font-family: Helvetica;
-    }
-  </style>
 </head>
 <body oncontextmenu="return false;">
-<canvas id="c" width="512" height="512"></canvas>
-<p>WW:<span id="ww"></span></p>
-<p>WC:<span id="wc"></span></p>
+  <div id="container">
+    <canvas id="c" width="512" height="512"></canvas>
+    <div id="overlay">
+      <p>WW:<span id="ww"></span></p>
+      <p>WC:<span id="wc"></span></p>
+    </div>
+  </div>
 </body>
 </html>

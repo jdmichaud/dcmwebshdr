@@ -1,4 +1,5 @@
 // import 'core-js/es6/promise';
+import 'styles/base.scss';
 import * as fragmentShaderSource from './fragment-shader.glsl';
 import * as vertexShaderSource from './vertex-shader.glsl';
 import * as webGl from './webgl';
@@ -25,7 +26,7 @@ function GlobalState(this: any, slope, intercept, ww, wc, deltaX, deltaY, zoom) 
     this.deltaX = this._deltaX;
     this.deltaY = this._deltaY;
     this.zoom = this._zoom;
-  }
+  };
 
   this.reset();
 }
@@ -58,8 +59,8 @@ function setWWWCDisplay(ww, wc) {
 }
 
 function initLocations(gl, locations, globalState) {
-  gl.uniform1f(locations.windowWidthLocation, globalState.ww / 65535);
-  gl.uniform1f(locations.windowCenterLocation, globalState.wc / 65535);
+  gl.uniform1f(locations.windowWidthLocation, globalState.ww);
+  gl.uniform1f(locations.windowCenterLocation, globalState.wc);
   setWWWCDisplay(globalState.ww, globalState.wc);
 }
 
@@ -75,13 +76,15 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
   const mousestart = { clientX: 0, clientY: 0 };
 
   function adjustWWWC(event) {
-    globalState.ww += event.movementX * 10;
-    globalState.wc -= event.movementY * 10;
-    gl.uniform1f(locations.windowWidthLocation, globalState.ww / 65535);
-    gl.uniform1f(locations.windowCenterLocation, globalState.wc / 65535);
+    globalState.ww = Math.max(Math.min(globalState.ww + event.movementX * 15, 65535), 0);
+    globalState.wc = Math.max(Math.min(globalState.wc - event.movementY * 15, 65535), 0);
+    gl.uniform1f(locations.windowWidthLocation, globalState.ww);
+    gl.uniform1f(locations.windowCenterLocation, globalState.wc);
     setWWWCDisplay(globalState.ww, globalState.wc);
     webGl.drawScene(gl, 6);
   }
+
+  // function adjustPan
 
   this.start = function start(event) {
     action = event.button;
@@ -104,7 +107,7 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
       break;
     }
     case action_e.PAN: {
-      adjustWWWC(event);
+      // adjustPan(event);
       break;
     }
     }
@@ -164,7 +167,7 @@ function main() {
     slopeLocation,
     windowCenterLocation,
     windowWidthLocation,
-  }
+  };
 
   initLocations(gl, locations, globalState);
   initDragEvents(canvas, new EventObject(gl, canvas, globalState, locations));
@@ -204,18 +207,12 @@ function main() {
       gl.bufferData(
         gl.ARRAY_BUFFER,
         new Float32Array([
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
+          0.0, 0.0,
+          1.0, 0.0,
+          0.0, 1.0,
+          0.0, 1.0,
+          1.0, 0.0,
+          1.0, 1.0,
         ]),
         gl.STATIC_DRAW
       );
@@ -242,6 +239,15 @@ function main() {
         gl.UNSIGNED_BYTE,
         new Uint8Array(request.response)
       );
+
+      var array = new Uint8Array(request.response);
+      var min = 255.0;
+      var max = 0.0;
+      for (let i = 0; i < array.length; ++i) {
+        min = Math.min(array[i], min);
+        max = Math.max(array[i], max);
+      }
+      console.log('min:', min, 'max:', max);
 
       // We draw a rectangle, so 6 vertices
       webGl.drawScene(gl, 6);
