@@ -6,12 +6,14 @@ attribute vec2 a_texCoord;
 varying vec2 v_texCoord;
 
 uniform vec2 u_pan;
+uniform vec2 u_scale;
 
 void main() {
+  // Apply zoom
+  vec2 scaled_position = a_position * u_scale;
+
   // Apply pan
-  vec2 panned_position = a_position + u_pan;
-  // vec2 panned_texCoord = a_texCoord + u_pan;
-  vec2 panned_texCoord = a_texCoord;
+  vec2 panned_position = scaled_position + u_pan;
 
   // convert the position from pixels to 0.0 to 1.0
   vec2 zeroToOne = panned_position / u_resolution;
@@ -27,5 +29,5 @@ void main() {
   gl_Position = vec4(clipSpace, 0, 1);
   // pass the texCoord to the fragment shader
   // The GPU will interpolate this value between points
-  v_texCoord = panned_texCoord;
+  v_texCoord = a_texCoord;
 }

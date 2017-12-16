@@ -8,8 +8,6 @@ const SLOPE = 1.54163614163614;
 const INTERCEPT = 0;
 const WW = 2223;
 const WC = 1112;
-// const WW = 24708;
-// const WC = 26237;
 
 function GlobalState(this: any, slope, intercept, ww, wc, deltaX, deltaY, zoom) {
   this._slope = slope;
@@ -49,14 +47,26 @@ function httpGetAsync(url, responseType = 'arraybuffer') {
   });
 }
 
-function setWWWCDisplay(ww, wc) {
+function setDisplay(globalState) {
   const wwElement = document.getElementById('ww');
   if (wwElement) {
-    wwElement.textContent = ww;
+    wwElement.textContent = globalState.ww;
   }
   const wcElement = document.getElementById('wc');
   if (wcElement) {
-    wcElement.textContent = wc;
+    wcElement.textContent = globalState.wc;
+  }
+  const zoomElement = document.getElementById('zoom');
+  if (zoomElement) {
+    zoomElement.textContent = `x${globalState.zoom.toFixed(2)}`;
+  }
+  const dxElement = document.getElementById('dX');
+  if (dxElement) {
+    dxElement.textContent = globalState.deltaX;
+  }
+  const dyElement = document.getElementById('dY');
+  if (dyElement) {
+    dyElement.textContent = globalState.deltaY;
   }
 }
 
@@ -64,7 +74,15 @@ function initLocations(gl, locations, globalState) {
   gl.uniform1f(locations.windowWidthLocation, globalState.ww);
   gl.uniform1f(locations.windowCenterLocation, globalState.wc);
   gl.uniform2f(locations.panLocation, globalState.deltaX, globalState.deltaY);
-  setWWWCDisplay(globalState.ww, globalState.wc);
+  gl.uniform2f(locations.scaleLocation, globalState.zoom, globalState.zoom);
+  setDisplay(globalState);
+}
+
+function convertToImageSpace(zoom, deltaX, deltaY, pos) {
+  console.log('pos[0]', pos[0]);
+  console.log('zoom', zoom);
+  console.log('deltaX', deltaX);
+  return [(pos[0] - deltaX) / zoom, (pos[1] - deltaY) / zoom];
 }
 
 function EventObject(this: any, gl, canvas, globalState, locations) {
@@ -77,27 +95,55 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
 
   let action: action_e = action_e.NONE;
   const mousestart = { clientX: 0, clientY: 0 };
+  let cursorStartPosition = [0, 0];
+  let startZoom = 0;
 
   function adjustWWWC(event) {
     globalState.ww = Math.max(Math.min(globalState.ww + event.movementX * 15, 65535), 0);
     globalState.wc = Math.max(Math.min(globalState.wc - event.movementY * 15, 65535), 0);
     gl.uniform1f(locations.windowWidthLocation, globalState.ww);
     gl.uniform1f(locations.windowCenterLocation, globalState.wc);
-    setWWWCDisplay(globalState.ww, globalState.wc);
     webGl.drawScene(gl, 6);
+    setDisplay(globalState);
   }
 
   function adjustPan(event) {
-    globalState.deltaX = Math.max(Math.min(globalState.deltaX + event.movementX, 512), -512);
-    globalState.deltaY = Math.max(Math.min(globalState.deltaY - event.movementY, 512), -512);
+    globalState.deltaY = Math.max(Math.min(globalState.deltaY - event.movementY, 512), -512 * globalState.zoom);
+    globalState.deltaX = Math.max(Math.min(globalState.deltaX + event.movementX, 512), -512 * globalState.zoom);
     gl.uniform2f(locations.panLocation, globalState.deltaX, globalState.deltaY);
     webGl.drawScene(gl, 6);
+    setDisplay(globalState);
+  }
+
+  function adjustZoom(event) {
+    const movement = Math.abs(event.movementX) > Math.abs(event.movementY)
+      ? event.movementX
+      : -event.movementY;
+    globalState.zoom = Math.max(
+      Math.min(
+        globalState.zoom + movement / 100,
+        10),
+      0);
+    gl.uniform2f(locations.scaleLocation, globalState.zoom, globalState.zoom);
+
+    globalState.deltaX = canvas.width / 2 - cursorStartPosition[0] * globalState.zoom;
+    globalState.deltaY = canvas.height / 2 - cursorStartPosition[1] * globalState.zoom;
+    gl.uniform2f(locations.panLocation, globalState.deltaX, globalState.deltaY);
+
+    webGl.drawScene(gl, 6);
+    setDisplay(globalState);
   }
 
   this.start = function start(event) {
     action = event.button;
-    mousestart.clientX = event.clientX;
-    mousestart.clientY = event.clientY;
+    mousestart.clientX = event.clientX - 7;
+    mousestart.clientY = event.clientY - 7;
+    cursorStartPosition = [
+      (mousestart.clientX - globalState.deltaX) / globalState.zoom,
+      (canvas.height - mousestart.clientY - globalState.deltaY) / globalState.zoom
+    ];
+    startZoom = globalState.zoom;
+    console.log(cursorStartPosition);
   }
 
   this.stop = function stop() {
@@ -111,7 +157,7 @@ function EventObject(this: any, gl, canvas, globalState, locations) {
       break;
     }
     case action_e.ZOOM: {
-      adjustWWWC(event);
+      adjustZoom(event);
       break;
     }
     case action_e.PAN: {
@@ -149,7 +195,7 @@ function main() {
   ({ canvas, gl, program } = webGl.init('c', vertexShaderSource, fragmentShaderSource));
   webGl.clearScreen(gl, 0, 0, 0, 0);
 
-  const globalState = new GlobalState(SLOPE, INTERCEPT, WW, WC, 0, 0, 1);
+  const globalState = new GlobalState(SLOPE, INTERCEPT, WW, WC, 0, 0, 1.0);
 
   // Tell it to use our program (pair of shaders)
   gl.useProgram(program);
@@ -173,10 +219,18 @@ function main() {
   const panLocation = gl.getUniformLocation(program, 'u_pan');
   gl.uniform2f(panLocation, 0, 0);
 
+  // Set the zoom
+  const scaleLocation = gl.getUniformLocation(program, 'u_scale');
+  gl.uniform2f(scaleLocation, 1.0, 1.0);
+  const cursorLocation = gl.getUniformLocation(program, 'u_cursor');
+  gl.uniform2f(cursorLocation, canvas.width, canvas.height);
+
   const locations = {
+    cursorLocation,
     interceptLocation,
     panLocation,
     resolutionUniformLocation,
+    scaleLocation,
     slopeLocation,
     windowCenterLocation,
     windowWidthLocation,

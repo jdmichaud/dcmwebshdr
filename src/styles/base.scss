@@ -1,9 +1,3 @@
-#greeting {
-  background-color: green;
-  border: 10px solid cornflowerblue;
-  padding: 10px;
-}
-
 body {
   font-family: monospace;
   color: #FFF;
@@ -16,7 +10,20 @@ p {
 
 #container {
   position: relative;
+  border: solid 1px #DDD;
 }
-#container canvas, #overlay {
+#container canvas, #overlay, #crosshair {
   position: absolute;
+}
+#c {
+}
+#crosshair polygon, circle {
+  fill: #FFF;
+}
+#crosshair {
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  position: absolute;
+  left: 50%;
+  top: 50%;
 }

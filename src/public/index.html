@@ -5,11 +5,29 @@
   <meta charset="UTF-8">
 </head>
 <body oncontextmenu="return false;">
-  <div id="container">
-    <canvas id="c" width="512" height="512"></canvas>
+  <div id="container" style="width:512px;height:512px">
+    <div class="inner-div">
+    </div>
+    <canvas id="c" width=512 height=512></canvas>
     <div id="overlay">
       <p>WW:<span id="ww"></span></p>
       <p>WC:<span id="wc"></span></p>
+      <p>Zoom:<span id="zoom"></span></p>
+      <p>dX:<span id="dX"></span></p>
+      <p>dY:<span id="dY"></span></p>
+    </div>
+    <div id="crosshair">
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="crosshair" x="0px" y="0px" viewBox="0 0 468.076 468.076" xml:space="preserve" width="28px" height="28px">
+        <g>
+          <g>
+            <polygon points="32.514,32.514 104.216,32.514 104.216,0 0,0 0,104.216 32.514,104.216"/>
+            <polygon points="468.076,0 363.859,0 363.859,32.514 435.562,32.514 435.562,104.216 468.076,104.216"/>
+            <polygon points="0,468.076 104.216,468.076 104.216,435.562 32.514,435.562 32.514,363.859 0,363.859"/>
+            <polygon points="435.562,435.562 363.859,435.562 363.859,468.076 468.076,468.076 468.076,363.859 435.562,363.859"/>
+            <circle cx="234.038" cy="234.038" r="20.809"/>
+          </g>
+        </g>
+      </svg>
     </div>
   </div>
 </body>
